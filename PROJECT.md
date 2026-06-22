@@ -2,7 +2,7 @@
 
 **What:** Reproducible command evidence recorder. Wraps commands, captures full execution context, stores auditable evidence bundles with integrity hashes.
 
-**Status:** Skeleton complete. Run/list/show/verify all working. Bjarn adding docs/tests.
+**Status:** MVP complete. Run/list/show/verify, docs, and integration tests are complete.
 
 **Tech:** Rust 2021, clap 4, serde/serde_json, chrono, sha2, thiserror.
 
@@ -16,7 +16,9 @@
 | main.rs | Nix | Done |
 | capture.rs | Nix | Done |
 | store.rs | Nix | Done |
-| report.rs | Nix | Done (Bjarn enhancing) |
+| report.rs | Nix | Done |
+| docs/SPEC.md | Bjarn | Done |
+| README.md | Bjarn | Done |
 
 ## Usage
 
@@ -40,4 +42,4 @@ witness verify <id>                        # check bundle integrity
 
 ## Last Updated
 
-2026-06-22 — Initial skeleton with run/list/show/verify working.
+2026-06-22 — MVP complete; `cargo test` passes with 12 integration tests.
