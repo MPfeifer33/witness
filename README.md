@@ -1,74 +1,97 @@
 # witness
 
-Reproducible command evidence recorder. Wraps any command, captures full execution context, and stores auditable evidence bundles with integrity hashes.
+`witness` is a reproducible command evidence recorder. It runs a command,
+captures stdout, stderr, exit code, duration, environment, git context, and a
+bundle hash, then stores the result locally.
 
-Built for AI agent workflows where you need to prove work happened: test runs, deployments, builds, migrations.
+It answers:
 
-## Install
-
-```sh
-cargo install --path .
+```text
+Can we prove what command was run and what it produced?
 ```
 
-## Usage
+## Quickstart
 
 ```sh
-# Record a test run
+cargo build
+
+# Record a test run.
+cargo run -- run -- cargo test
+
+# Record with a tag.
+cargo run -- run --tag test -- cargo test
+
+# Browse and inspect evidence.
+cargo run -- list
+cargo run -- show <id>
+cargo run -- verify <id>
+```
+
+After installation, replace `cargo run --` with `witness`.
+
+## Commands
+
+### run
+
+```sh
 witness run -- cargo test
+witness run --tag lint -- cargo clippy
+witness run --format json --tag smoke -- sh -c "printf hello"
+```
 
-# Record with a tag
-witness run --tag deploy -- ./deploy.sh
+`witness run` records the wrapped command's exit code as evidence. If the
+wrapped command fails, `witness` still succeeds as long as it captured and
+stored the evidence.
 
-# List recent evidence
+### list
+
+```sh
 witness list
 witness list --limit 5
-
-# Show full evidence detail
-witness show <id>
-
-# Verify bundle integrity (detect tampering)
-witness verify <id>
-
-# JSON output for programmatic use
-witness --format json run -- cargo build
-witness --format json list
+witness list --format json
 ```
 
-## Evidence Bundle
+### show
 
-Each bundle captures:
+```sh
+witness show <id>
+witness show <id> --format json
+```
 
-| Field | Description |
-|-------|-------------|
-| id | SHA-256 derived unique identifier |
-| timestamp | RFC 3339 execution time |
-| command | Full command string |
-| tag | Optional categorization label |
-| cwd | Working directory |
-| exit_code | Process exit status |
-| duration_ms | Execution time in milliseconds |
-| stdout/stderr | Full captured output |
-| environment | OS, user, rust/node versions |
-| git_context | Branch, HEAD SHA, dirty state |
-| bundle_hash | SHA-256 over key fields for integrity |
+### verify
+
+```sh
+witness verify <id>
+witness verify <id> --format json
+```
 
 ## Storage
 
-Evidence is stored in `.agent-witness/evidence/<id>.json` under the repo root, automatically gitignored.
+```text
+.agent-witness/
+  .gitignore
+  evidence/
+    <id>.json
+```
 
-## Verification
+The storage directory is ignored by default.
 
-`witness verify <id>` recomputes the SHA-256 hash over the bundle's key fields and compares it to the stored hash. If they differ, the bundle may have been tampered with.
+## Typical Agent Flow
 
-## Exit Codes
+```sh
+probe doctor
+sieve analyze
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Validation or JSON error |
-| 2 | IO error |
-| 3 | Evidence not found |
+# Run targeted tests with evidence.
+witness run --tag test -- cargo test --test cli_claims
 
-## License
+# Run full validation with evidence before handoff.
+witness run --tag full-test -- cargo test
 
-MIT
+# Include evidence IDs in the final note or latch handoff.
+witness list
+```
+
+## Design
+
+The implementation contract is in [docs/SPEC.md](docs/SPEC.md).
