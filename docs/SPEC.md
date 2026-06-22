@@ -1,90 +1,130 @@
-# witness — Design Specification
+# witness spec
 
-## Purpose
+Status: MVP implementation contract
 
-Provide reproducible, tamper-evident records of command execution for AI agent workflows. Agents need to prove that tests passed, deploys ran, or builds succeeded — especially across session boundaries where context is lost.
+`witness` is a reproducible command evidence recorder. It runs a command,
+captures execution context and output, stores an evidence bundle, and verifies
+the bundle hash later.
 
-## Architecture
+## Goals
 
+- Make "tests passed" and similar claims auditable after compaction.
+- Store command output with environment and git context.
+- Keep evidence repo-local and gitignored.
+- Support simple listing, showing, and hash verification.
+
+## Non-Goals
+
+- Secure sandboxing.
+- Tamper-proof append-only storage.
+- Streaming long-running command output.
+- Remote evidence upload.
+
+## Storage
+
+```text
+.agent-witness/
+  .gitignore
+  evidence/
+    <id>.json
 ```
-cli.rs        — Argument parsing (clap derive API)
-capture.rs    — Command execution + environment/git collection
-store.rs      — Filesystem persistence + integrity verification
-report.rs     — Human-readable and JSON output formatting
-main.rs       — Dispatch + error handling
+
+`.agent-witness/.gitignore` contains `*` by default. Evidence is local session
+state, not a product artifact.
+
+## Commands
+
+### run
+
+```sh
+witness run -- cargo test
+witness run --tag test -- cargo test
+witness run --format json --tag lint -- cargo clippy
 ```
 
-## Data Model
+Runs the command after `--`, records evidence, and exits successfully as long
+as the command could be executed and the evidence could be stored. A failing
+wrapped command is recorded with `passed: false`.
 
-### Evidence (core struct)
+### list
 
-```rust
-struct Evidence {
-    id: String,           // SHA-256(timestamp + pid)[..12]
-    timestamp: String,    // RFC 3339
-    command: String,      // Full command string
-    tag: Option<String>,  // User-provided label
-    cwd: String,          // Working directory at execution
-    exit_code: i32,       // Process exit status
-    duration_ms: u128,    // Wall-clock execution time
-    stdout: String,       // Full captured stdout
-    stderr: String,       // Full captured stderr
-    environment: Environment,
-    git_context: Option<GitContext>,
-    bundle_hash: String,  // SHA-256 integrity hash
+```sh
+witness list
+witness list --limit 5
+witness list --format json
+```
+
+Shows recent evidence bundles, newest first.
+
+### show
+
+```sh
+witness show <id>
+witness show <id> --format json
+```
+
+Shows one full evidence bundle.
+
+### verify
+
+```sh
+witness verify <id>
+witness verify <id> --format json
+```
+
+Recomputes the SHA-256 bundle hash from the command, timestamp, exit code,
+stdout, and stderr.
+
+## Evidence Schema
+
+```json
+{
+  "id": "12-char-hash",
+  "timestamp": "2026-06-22T04:40:00Z",
+  "command": "cargo test",
+  "tag": "test",
+  "cwd": "/path/to/repo",
+  "exit_code": 0,
+  "duration_ms": 87,
+  "stdout": "...",
+  "stderr": "...",
+  "environment": {
+    "os": "linux",
+    "user": "mpfeifer",
+    "rust_version": "rustc 1.96.0",
+    "node_version": "v24.0.0"
+  },
+  "git_context": {
+    "branch": "master",
+    "head_sha": "abc1234",
+    "dirty": false
+  },
+  "bundle_hash": "sha256 hex"
 }
 ```
 
-### Bundle Hash Computation
+`git_context` is `null` outside a git repository.
 
-```
-SHA-256(command || timestamp || exit_code || stdout || stderr)
-```
+## Run JSON Output
 
-Fields are concatenated as UTF-8 bytes. The hash covers the minimum fields needed to detect tampering while being reproducible from the stored data.
-
-### ID Generation
-
-```
-SHA-256(timestamp || process_id)[..12]
-```
-
-12 hex chars = 48 bits of entropy. Sufficient for local evidence stores (collision probability negligible under millions of records).
-
-## Storage Layout
-
-```
-<repo>/.agent-witness/
-  .gitignore          # Contains "*" — never committed
-  evidence/
-    <id>.json         # Pretty-printed Evidence struct
+```json
+{
+  "ok": true,
+  "evidence_id": "abc123def456",
+  "exit_code": 0,
+  "duration_ms": 87,
+  "passed": true
+}
 ```
 
-## Verification Protocol
+## Exit Codes
 
-1. Load evidence bundle from disk
-2. Recompute SHA-256 over (command, timestamp, exit_code, stdout, stderr)
-3. Compare computed hash to stored `bundle_hash`
-4. Return pass/fail
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Witness command completed and evidence operation succeeded |
+| `1` | Validation or JSON error |
+| `2` | IO error |
+| `3` | Evidence not found |
 
-This catches:
-- Manual edits to output fields
-- Corrupted writes
-- Intentional result falsification
-
-This does NOT catch:
-- Wholesale replacement of entire bundle (id + hash)
-- Replay attacks (same command produces different results)
-
-## Error Handling
-
-All errors are typed via `WitnessError` enum with structured JSON output when `--format json` is active. Exit codes are deterministic per error variant.
-
-## Design Decisions
-
-1. **No database** — JSON files are inspectable, diffable, portable. One file per evidence bundle.
-2. **Gitignored by default** — Evidence contains secrets (env vars, output). Never committed.
-3. **SHA-256 for hashing** — Industry standard, no custom crypto.
-4. **Truncated display** — stdout/stderr capped at 20/10 lines in text mode. Full data in JSON mode.
-5. **Git context optional** — Works outside git repos (git_context will be None).
-6. **Process output captured, not streamed** — Tradeoff: no real-time output during recording, but complete capture.
+The wrapped command exit code is data in the evidence bundle; it does not
+become the `witness run` process exit code in the MVP.
