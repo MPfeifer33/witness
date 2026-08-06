@@ -69,8 +69,8 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
         }
         Command::List { limit } => {
             let repo = cli.resolve_repo()?;
-            let entries = store::list(&repo, *limit)?;
-            report::print_list(&entries, cli.is_json())?;
+            let list = store::list(&repo, *limit)?;
+            report::print_list(&list, cli.is_json())?;
             Ok(())
         }
         Command::Show { id } => {
@@ -82,7 +82,7 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
         Command::Verify { id } => {
             let repo = cli.resolve_repo()?;
             let evidence = store::load(&repo, id)?;
-            let valid = store::verify(&repo, &evidence)?;
+            let verification = store::verify(&repo, &evidence)?;
 
             if cli.is_json() {
                 println!(
@@ -90,13 +90,17 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
                     serde_json::to_string_pretty(&serde_json::json!({
                         "ok": true,
                         "evidence_id": id,
-                        "verified": valid,
+                        "verified": verification.verified,
+                        "reason": verification.reason.as_str(),
                     }))?
                 );
-            } else if valid {
+            } else if verification.verified {
                 println!("✓ Evidence {id} verified — bundle hash matches");
             } else {
-                println!("✗ Evidence {id} FAILED verification — bundle may be tampered");
+                println!(
+                    "✗ Evidence {id} FAILED verification — {}",
+                    verification.reason.human_message()
+                );
             }
             Ok(())
         }

@@ -56,6 +56,11 @@ witness list --format json
 
 Shows recent evidence bundles, newest first.
 
+Valid bundles are listed normally. Unreadable or unparseable `.json` files in
+the evidence directory are reported as invalid bundle entries instead of being
+silently ignored. The list command should not fail the whole operation because
+one local bundle is corrupt; corruption is surfaced as data for the caller.
+
 ### show
 
 ```sh
@@ -75,6 +80,12 @@ witness verify <id> --format json
 Recomputes the SHA-256 bundle hash from the bundle's declared hash contract.
 New bundles use `witness-v2`; legacy bundles without a hash version use the
 original MVP hash contract.
+
+JSON verification returns a stable reason string:
+
+- `valid`
+- `hash_mismatch`
+- `unsupported_hash_version`
 
 ## Evidence Schema
 
@@ -149,6 +160,10 @@ new `witness-v2` evidence as the stronger trust surface.
 Evidence with an unknown explicit `bundle_hash_version` fails verification
 closed. Witness should only verify hash contracts it knows how to recompute.
 
+`show` is an inspection surface, not a trust decision. It must render partial
+or malformed evidence without panicking where deserialization still succeeds;
+verification remains the source of truth for integrity.
+
 ## Run JSON Output
 
 ```json
@@ -158,6 +173,36 @@ closed. Witness should only verify hash contracts it knows how to recompute.
   "exit_code": 0,
   "duration_ms": 87,
   "passed": true
+}
+```
+
+## List JSON Output
+
+```json
+{
+  "ok": true,
+  "evidence": [],
+  "invalid_count": 1,
+  "invalid": [
+    {
+      "path": ".agent-witness/evidence/bad.json",
+      "reason": "json error: expected value at line 1 column 1"
+    }
+  ]
+}
+```
+
+`evidence` is preserved for compatibility. `invalid_count` and `invalid`
+describe local evidence files that could not be read or parsed.
+
+## Verify JSON Output
+
+```json
+{
+  "ok": true,
+  "evidence_id": "abc123def456",
+  "verified": false,
+  "reason": "hash_mismatch"
 }
 ```
 

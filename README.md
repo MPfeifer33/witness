@@ -51,6 +51,10 @@ witness list --limit 5
 witness list --format json
 ```
 
+`list` reports valid evidence and surfaces unreadable or invalid local bundles
+instead of silently hiding them. JSON output includes `invalid_count` and an
+`invalid` array with bundle paths and parse/read reasons.
+
 ### show
 
 ```sh
@@ -64,6 +68,9 @@ witness show <id> --format json
 witness verify <id>
 witness verify <id> --format json
 ```
+
+JSON verification includes `verified` plus a stable `reason`: `valid`,
+`hash_mismatch`, or `unsupported_hash_version`.
 
 ## Storage
 
@@ -86,6 +93,10 @@ context, and hash contract version.
 Older bundles without `bundle_hash_version` still verify with the legacy hash
 contract, which covered command text, timestamp, exit code, stdout, and stderr.
 Legacy verification is kept for compatibility, but new evidence should use v2.
+
+Evidence with an unknown explicit hash contract fails closed. `show` remains a
+read-only inspection command and will render malformed hash previews safely;
+use `verify` to determine whether a bundle is trusted.
 
 ## Typical Agent Flow
 

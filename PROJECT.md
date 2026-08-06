@@ -2,7 +2,7 @@
 
 **What:** Reproducible command evidence recorder. Wraps commands, captures full execution context, stores auditable evidence bundles with integrity hashes.
 
-**Status:** MVP complete. Run/list/show/verify, docs, and integration tests are complete. Evidence bundles now use a versioned integrity contract for new captures.
+**Status:** MVP complete. Run/list/show/verify, docs, and integration tests are complete. Evidence bundles now use a versioned integrity contract for new captures, list surfaces corrupt local bundles, and verify reports stable machine-readable reasons.
 
 **Tech:** Rust 2021, clap 4, serde/serde_json, chrono, sha2, thiserror.
 
@@ -43,4 +43,4 @@ witness verify <id>                        # check bundle integrity
 
 ## Last Updated
 
-2026-08-06 — Added `witness-v2` evidence hashing for full-context integrity while keeping legacy bundle verification.
+2026-08-06 — Added `witness-v2` evidence hashing for full-context integrity, corrupt-bundle list reporting, safe hash previews, and verify reason codes.

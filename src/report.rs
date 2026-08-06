@@ -1,37 +1,51 @@
 use crate::capture::Evidence;
-use crate::store::EvidenceEntry;
+use crate::store::EvidenceList;
 use crate::WitnessError;
 
-pub fn print_list(entries: &[EvidenceEntry], is_json: bool) -> Result<(), WitnessError> {
+pub fn print_list(list: &EvidenceList, is_json: bool) -> Result<(), WitnessError> {
     if is_json {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "ok": true,
-                "evidence": entries,
+                "evidence": &list.entries,
+                "invalid_count": list.invalid_count(),
+                "invalid": &list.invalid,
             }))?
         );
     } else {
-        if entries.is_empty() {
+        if list.entries.is_empty() && list.invalid.is_empty() {
             println!("No evidence recorded yet.");
         } else {
-            println!("witness: {} evidence bundle(s)", entries.len());
-            println!();
-            for e in entries {
-                let icon = if e.exit_code == 0 { "✓" } else { "✗" };
-                let tag_str = e
-                    .tag
-                    .as_deref()
-                    .map(|t| format!(" [{t}]"))
-                    .unwrap_or_default();
-                println!(
-                    "  {icon} {} `{}`{} ({}ms, exit {})",
-                    e.id,
-                    truncate(&e.command, 50),
-                    tag_str,
-                    e.duration_ms,
-                    e.exit_code,
-                );
+            if !list.entries.is_empty() {
+                println!("witness: {} evidence bundle(s)", list.entries.len());
+                println!();
+                for e in &list.entries {
+                    let icon = if e.exit_code == 0 { "✓" } else { "✗" };
+                    let tag_str = e
+                        .tag
+                        .as_deref()
+                        .map(|t| format!(" [{t}]"))
+                        .unwrap_or_default();
+                    println!(
+                        "  {icon} {} `{}`{} ({}ms, exit {})",
+                        e.id,
+                        truncate(&e.command, 50),
+                        tag_str,
+                        e.duration_ms,
+                        e.exit_code,
+                    );
+                }
+            }
+
+            if !list.invalid.is_empty() {
+                if !list.entries.is_empty() {
+                    println!();
+                }
+                println!("Invalid evidence bundle(s): {}", list.invalid_count());
+                for invalid in &list.invalid {
+                    println!("  ! {} ({})", invalid.path, invalid.reason);
+                }
             }
         }
     }
@@ -84,7 +98,7 @@ pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessE
             );
         }
 
-        println!("  Bundle hash: {}", &evidence.bundle_hash[..16]);
+        println!("  Bundle hash: {}", hash_preview(&evidence.bundle_hash));
 
         if !evidence.stdout.is_empty() {
             println!();
@@ -118,9 +132,19 @@ pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessE
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    let mut chars = s.chars();
+    let preview: String = chars.by_ref().take(max).collect();
+    if chars.next().is_none() {
         s.to_string()
     } else {
-        format!("{}...", &s[..max])
+        format!("{preview}...")
+    }
+}
+
+fn hash_preview(hash: &str) -> String {
+    if hash.is_empty() {
+        "<missing>".to_string()
+    } else {
+        hash.chars().take(16).collect()
     }
 }

@@ -28,33 +28,65 @@ pub fn save(repo: &Path, evidence: &Evidence) -> Result<String, WitnessError> {
     Ok(evidence.id.clone())
 }
 
-pub fn list(repo: &Path, limit: usize) -> Result<Vec<EvidenceEntry>, WitnessError> {
+pub fn list(repo: &Path, limit: usize) -> Result<EvidenceList, WitnessError> {
     let dir = evidence_dir(repo);
     if !dir.exists() {
-        return Ok(Vec::new());
+        return Ok(EvidenceList::default());
     }
 
-    let mut entries: Vec<EvidenceEntry> = std::fs::read_dir(&dir)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
-        .filter_map(|e| {
-            let content = std::fs::read_to_string(e.path()).ok()?;
-            let evidence: Evidence = serde_json::from_str(&content).ok()?;
-            Some(EvidenceEntry {
-                id: evidence.id,
-                timestamp: evidence.timestamp,
-                command: evidence.command,
-                exit_code: evidence.exit_code,
-                duration_ms: evidence.duration_ms,
-                tag: evidence.tag,
-            })
-        })
-        .collect();
+    let mut entries = Vec::new();
+    let mut invalid = Vec::new();
+
+    for entry in std::fs::read_dir(&dir)? {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                invalid.push(InvalidEvidenceEntry {
+                    path: dir.display().to_string(),
+                    reason: format!("read_dir error: {err}"),
+                });
+                continue;
+            }
+        };
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "json") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(err) => {
+                invalid.push(InvalidEvidenceEntry {
+                    path: display_evidence_path(repo, &path),
+                    reason: format!("io error: {err}"),
+                });
+                continue;
+            }
+        };
+        let evidence: Evidence = match serde_json::from_str(&content) {
+            Ok(evidence) => evidence,
+            Err(err) => {
+                invalid.push(InvalidEvidenceEntry {
+                    path: display_evidence_path(repo, &path),
+                    reason: format!("json error: {err}"),
+                });
+                continue;
+            }
+        };
+        entries.push(EvidenceEntry {
+            id: evidence.id,
+            timestamp: evidence.timestamp,
+            command: evidence.command,
+            exit_code: evidence.exit_code,
+            duration_ms: evidence.duration_ms,
+            tag: evidence.tag,
+        });
+    }
 
     // Sort by timestamp descending
     entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     entries.truncate(limit);
-    Ok(entries)
+    Ok(EvidenceList { entries, invalid })
 }
 
 pub fn load(repo: &Path, id: &str) -> Result<Evidence, WitnessError> {
@@ -70,8 +102,25 @@ pub fn load(repo: &Path, id: &str) -> Result<Evidence, WitnessError> {
     Ok(evidence)
 }
 
-pub fn verify(_repo: &Path, evidence: &Evidence) -> Result<bool, WitnessError> {
-    Ok(compute_bundle_hash(evidence).is_some_and(|computed| computed == evidence.bundle_hash))
+pub fn verify(_repo: &Path, evidence: &Evidence) -> Result<VerificationResult, WitnessError> {
+    let Some(computed) = compute_bundle_hash(evidence) else {
+        return Ok(VerificationResult {
+            verified: false,
+            reason: VerificationReason::UnsupportedHashVersion,
+        });
+    };
+
+    if computed == evidence.bundle_hash {
+        Ok(VerificationResult {
+            verified: true,
+            reason: VerificationReason::Valid,
+        })
+    } else {
+        Ok(VerificationResult {
+            verified: false,
+            reason: VerificationReason::HashMismatch,
+        })
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -82,4 +131,60 @@ pub struct EvidenceEntry {
     pub exit_code: i32,
     pub duration_ms: u128,
     pub tag: Option<String>,
+}
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct EvidenceList {
+    pub entries: Vec<EvidenceEntry>,
+    pub invalid: Vec<InvalidEvidenceEntry>,
+}
+
+impl EvidenceList {
+    pub fn invalid_count(&self) -> usize {
+        self.invalid.len()
+    }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct InvalidEvidenceEntry {
+    pub path: String,
+    pub reason: String,
+}
+
+#[derive(Debug)]
+pub struct VerificationResult {
+    pub verified: bool,
+    pub reason: VerificationReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationReason {
+    Valid,
+    HashMismatch,
+    UnsupportedHashVersion,
+}
+
+impl VerificationReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VerificationReason::Valid => "valid",
+            VerificationReason::HashMismatch => "hash_mismatch",
+            VerificationReason::UnsupportedHashVersion => "unsupported_hash_version",
+        }
+    }
+
+    pub fn human_message(self) -> &'static str {
+        match self {
+            VerificationReason::Valid => "bundle hash matches",
+            VerificationReason::HashMismatch => "bundle hash mismatch",
+            VerificationReason::UnsupportedHashVersion => "unsupported bundle hash version",
+        }
+    }
+}
+
+fn display_evidence_path(repo: &Path, path: &Path) -> String {
+    path.strip_prefix(repo)
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }

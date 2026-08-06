@@ -1,7 +1,7 @@
 //! Integration tests for witness CLI.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
@@ -74,6 +74,19 @@ fn init_repo(dir: &Path) {
         .current_dir(dir)
         .output()
         .unwrap();
+}
+
+fn evidence_path(dir: &Path, id: &str) -> PathBuf {
+    dir.join(".agent-witness/evidence")
+        .join(format!("{id}.json"))
+}
+
+fn mutate_evidence(dir: &Path, id: &str, mut mutate: impl FnMut(&mut serde_json::Value)) {
+    let path = evidence_path(dir, id);
+    let content = fs::read_to_string(&path).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
+    mutate(&mut value);
+    fs::write(&path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
 }
 
 // --- run ---
@@ -173,6 +186,8 @@ fn list_empty_is_ok() {
 
     assert_eq!(json["ok"], true);
     assert_eq!(json["evidence"].as_array().unwrap().len(), 0);
+    assert_eq!(json["invalid_count"], 0);
+    assert_eq!(json["invalid"].as_array().unwrap().len(), 0);
 }
 
 #[test]
@@ -201,6 +216,44 @@ fn list_shows_recorded_evidence() {
 
     assert_eq!(json["ok"], true);
     assert_eq!(json["evidence"].as_array().unwrap().len(), 2);
+    assert_eq!(json["invalid_count"], 0);
+}
+
+#[test]
+fn list_surfaces_invalid_evidence_files() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let evidence_dir = dir.join(".agent-witness/evidence");
+    fs::create_dir_all(&evidence_dir).unwrap();
+    fs::write(evidence_dir.join("bad.json"), "{not json}").unwrap();
+
+    let json = json_output(
+        witness(dir)
+            .args(["--format", "json", "list"])
+            .output()
+            .unwrap(),
+        "witness list corrupt json",
+    );
+
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["evidence"].as_array().unwrap().len(), 0);
+    assert_eq!(json["invalid_count"], 1);
+    assert!(json["invalid"][0]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("bad.json"));
+    assert!(json["invalid"][0]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("json error"));
+
+    let output = witness(dir).arg("list").output().unwrap();
+    assert_success(&output, "witness list corrupt json text");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Invalid evidence bundle"));
+    assert!(stdout.contains("bad.json"));
 }
 
 // --- show ---
@@ -255,6 +308,31 @@ fn show_nonexistent_fails() {
     assert_eq!(output.status.code().unwrap(), 3);
 }
 
+#[test]
+fn show_text_handles_short_bundle_hash() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let run_json = json_output(
+        witness(dir)
+            .args(["--format", "json", "run", "--", "echo", "short-hash"])
+            .output()
+            .unwrap(),
+        "witness run",
+    );
+    let id = run_json["evidence_id"].as_str().unwrap();
+
+    mutate_evidence(dir, id, |value| {
+        value["bundle_hash"] = serde_json::json!("abc");
+    });
+
+    let output = witness(dir).args(["show", id]).output().unwrap();
+    assert_success(&output, "witness show short hash text");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Bundle hash: abc"));
+}
+
 // --- verify ---
 
 #[test]
@@ -282,6 +360,7 @@ fn verify_valid_bundle_passes() {
 
     assert_eq!(verify["ok"], true);
     assert_eq!(verify["verified"], true);
+    assert_eq!(verify["reason"], "valid");
 }
 
 #[test]
@@ -300,9 +379,7 @@ fn verify_tampered_bundle_fails() {
     let id = run_json["evidence_id"].as_str().unwrap();
 
     // Tamper with the stored evidence
-    let evidence_path = dir
-        .join(".agent-witness/evidence")
-        .join(format!("{id}.json"));
+    let evidence_path = evidence_path(dir, id);
     let content = fs::read_to_string(&evidence_path).unwrap();
     let tampered = content.replace("tamper-test", "TAMPERED");
     fs::write(&evidence_path, tampered).unwrap();
@@ -317,6 +394,7 @@ fn verify_tampered_bundle_fails() {
 
     assert_eq!(verify["ok"], true);
     assert_eq!(verify["verified"], false);
+    assert_eq!(verify["reason"], "hash_mismatch");
 }
 
 #[test]
@@ -336,18 +414,10 @@ fn verify_tampered_context_fails() {
     );
     let id = run_json["evidence_id"].as_str().unwrap();
 
-    let evidence_path = dir
-        .join(".agent-witness/evidence")
-        .join(format!("{id}.json"));
-    let content = fs::read_to_string(&evidence_path).unwrap();
-    let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
-    value["git_context"]["dirty"] =
-        serde_json::json!(!value["git_context"]["dirty"].as_bool().unwrap());
-    fs::write(
-        &evidence_path,
-        serde_json::to_string_pretty(&value).unwrap(),
-    )
-    .unwrap();
+    mutate_evidence(dir, id, |value| {
+        value["git_context"]["dirty"] =
+            serde_json::json!(!value["git_context"]["dirty"].as_bool().unwrap());
+    });
 
     let verify = json_output(
         witness(dir)
@@ -359,6 +429,7 @@ fn verify_tampered_context_fails() {
 
     assert_eq!(verify["ok"], true);
     assert_eq!(verify["verified"], false);
+    assert_eq!(verify["reason"], "hash_mismatch");
 }
 
 #[test]
@@ -412,6 +483,7 @@ fn verify_legacy_bundle_without_hash_version_still_passes() {
 
     assert_eq!(verify["ok"], true);
     assert_eq!(verify["verified"], true);
+    assert_eq!(verify["reason"], "valid");
 }
 
 #[test]
@@ -429,17 +501,9 @@ fn verify_unknown_hash_version_fails_closed() {
     );
     let id = run_json["evidence_id"].as_str().unwrap();
 
-    let evidence_path = dir
-        .join(".agent-witness/evidence")
-        .join(format!("{id}.json"));
-    let content = fs::read_to_string(&evidence_path).unwrap();
-    let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
-    value["bundle_hash_version"] = serde_json::json!("witness-v999");
-    fs::write(
-        &evidence_path,
-        serde_json::to_string_pretty(&value).unwrap(),
-    )
-    .unwrap();
+    mutate_evidence(dir, id, |value| {
+        value["bundle_hash_version"] = serde_json::json!("witness-v999");
+    });
 
     let verify = json_output(
         witness(dir)
@@ -451,6 +515,7 @@ fn verify_unknown_hash_version_fails_closed() {
 
     assert_eq!(verify["ok"], true);
     assert_eq!(verify["verified"], false);
+    assert_eq!(verify["reason"], "unsupported_hash_version");
 }
 
 // --- text output ---
