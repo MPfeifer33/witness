@@ -4,7 +4,11 @@ use std::path::PathBuf;
 use crate::WitnessError;
 
 #[derive(Parser, Debug)]
-#[command(name = "witness", version, about = "Reproducible command evidence recorder")]
+#[command(
+    name = "witness",
+    version,
+    about = "Reproducible command evidence recorder"
+)]
 pub struct Cli {
     /// Project root override
     #[arg(long, global = true)]

@@ -4,10 +4,13 @@ use crate::WitnessError;
 
 pub fn print_list(entries: &[EvidenceEntry], is_json: bool) -> Result<(), WitnessError> {
     if is_json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "ok": true,
-            "evidence": entries,
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "ok": true,
+                "evidence": entries,
+            }))?
+        );
     } else {
         if entries.is_empty() {
             println!("No evidence recorded yet.");
@@ -16,8 +19,13 @@ pub fn print_list(entries: &[EvidenceEntry], is_json: bool) -> Result<(), Witnes
             println!();
             for e in entries {
                 let icon = if e.exit_code == 0 { "✓" } else { "✗" };
-                let tag_str = e.tag.as_deref().map(|t| format!(" [{t}]")).unwrap_or_default();
-                println!("  {icon} {} `{}`{} ({}ms, exit {})",
+                let tag_str = e
+                    .tag
+                    .as_deref()
+                    .map(|t| format!(" [{t}]"))
+                    .unwrap_or_default();
+                println!(
+                    "  {icon} {} `{}`{} ({}ms, exit {})",
                     e.id,
                     truncate(&e.command, 50),
                     tag_str,
@@ -32,12 +40,19 @@ pub fn print_list(entries: &[EvidenceEntry], is_json: bool) -> Result<(), Witnes
 
 pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessError> {
     if is_json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "ok": true,
-            "evidence": evidence,
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "ok": true,
+                "evidence": evidence,
+            }))?
+        );
     } else {
-        let icon = if evidence.exit_code == 0 { "✓" } else { "✗" };
+        let icon = if evidence.exit_code == 0 {
+            "✓"
+        } else {
+            "✗"
+        };
         println!("witness evidence: {icon} {}", evidence.id);
         println!();
         println!("  Command: {}", evidence.command);
@@ -61,7 +76,12 @@ pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessE
         }
 
         if let Some(ref git) = evidence.git_context {
-            println!("  Git: {} @ {}{}", git.branch, git.head_sha, if git.dirty { " (dirty)" } else { "" });
+            println!(
+                "  Git: {} @ {}{}",
+                git.branch,
+                git.head_sha,
+                if git.dirty { " (dirty)" } else { "" }
+            );
         }
 
         println!("  Bundle hash: {}", &evidence.bundle_hash[..16]);
@@ -73,7 +93,10 @@ pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessE
                 println!("  {line}");
             }
             if evidence.stdout.lines().count() > 20 {
-                println!("  ... ({} more lines)", evidence.stdout.lines().count() - 20);
+                println!(
+                    "  ... ({} more lines)",
+                    evidence.stdout.lines().count() - 20
+                );
             }
         }
 
@@ -84,7 +107,10 @@ pub fn print_evidence(evidence: &Evidence, is_json: bool) -> Result<(), WitnessE
                 println!("  {line}");
             }
             if evidence.stderr.lines().count() > 10 {
-                println!("  ... ({} more lines)", evidence.stderr.lines().count() - 10);
+                println!(
+                    "  ... ({} more lines)",
+                    evidence.stderr.lines().count() - 10
+                );
             }
         }
     }

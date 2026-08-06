@@ -1,8 +1,8 @@
 # witness
 
 `witness` is a reproducible command evidence recorder. It runs a command,
-captures stdout, stderr, exit code, duration, environment, git context, and a
-bundle hash, then stores the result locally.
+captures stdout, stderr, exit code, duration, exact argv, environment, git
+context, and a versioned bundle hash, then stores the result locally.
 
 It answers:
 
@@ -75,6 +75,17 @@ witness verify <id> --format json
 ```
 
 The storage directory is ignored by default.
+
+## Integrity
+
+New evidence bundles use `schema_version: 2` and
+`bundle_hash_version: witness-v2`. The v2 hash protects the command display,
+exact argv, tag, cwd, exit code, duration, stdout, stderr, environment, git
+context, and hash contract version.
+
+Older bundles without `bundle_hash_version` still verify with the legacy hash
+contract, which covered command text, timestamp, exit code, stdout, and stderr.
+Legacy verification is kept for compatibility, but new evidence should use v2.
 
 ## Typical Agent Flow
 

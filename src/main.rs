@@ -1,7 +1,7 @@
-mod cli;
 mod capture;
-mod store;
+mod cli;
 mod report;
+mod store;
 
 use clap::Parser;
 use cli::{Cli, Command};
@@ -21,7 +21,12 @@ fn main() {
                         "message": e.to_string(),
                     }
                 });
-                eprintln!("{}", serde_json::to_string_pretty(&err_json).unwrap_or_else(|_| format!("{{\"ok\":false,\"error\":{{\"message\":\"{e}\"}}}}")));
+                eprintln!(
+                    "{}",
+                    serde_json::to_string_pretty(&err_json).unwrap_or_else(|_| format!(
+                        "{{\"ok\":false,\"error\":{{\"message\":\"{e}\"}}}}"
+                    ))
+                );
             } else {
                 eprintln!("error: {e}");
             }
@@ -38,16 +43,26 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
             let id = store::save(&repo, &evidence)?;
 
             if cli.is_json() {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "ok": true,
-                    "evidence_id": id,
-                    "exit_code": evidence.exit_code,
-                    "duration_ms": evidence.duration_ms,
-                    "passed": evidence.exit_code == 0,
-                }))?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "ok": true,
+                        "evidence_id": id,
+                        "exit_code": evidence.exit_code,
+                        "duration_ms": evidence.duration_ms,
+                        "passed": evidence.exit_code == 0,
+                    }))?
+                );
             } else {
-                let icon = if evidence.exit_code == 0 { "✓" } else { "✗" };
-                println!("{icon} Command completed (exit {}), evidence saved: {id}", evidence.exit_code);
+                let icon = if evidence.exit_code == 0 {
+                    "✓"
+                } else {
+                    "✗"
+                };
+                println!(
+                    "{icon} Command completed (exit {}), evidence saved: {id}",
+                    evidence.exit_code
+                );
                 println!("  Duration: {}ms", evidence.duration_ms);
             }
             Ok(())
@@ -70,11 +85,14 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
             let valid = store::verify(&repo, &evidence)?;
 
             if cli.is_json() {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "ok": true,
-                    "evidence_id": id,
-                    "verified": valid,
-                }))?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "ok": true,
+                        "evidence_id": id,
+                        "verified": valid,
+                    }))?
+                );
             } else if valid {
                 println!("✓ Evidence {id} verified — bundle hash matches");
             } else {

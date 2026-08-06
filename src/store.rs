@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
-use sha2::{Sha256, Digest};
 
-use crate::capture::Evidence;
+use crate::capture::{compute_bundle_hash, Evidence};
 use crate::WitnessError;
 
 const WITNESS_DIR: &str = ".agent-witness";
@@ -37,7 +36,7 @@ pub fn list(repo: &Path, limit: usize) -> Result<Vec<EvidenceEntry>, WitnessErro
 
     let mut entries: Vec<EvidenceEntry> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .filter_map(|e| {
             let content = std::fs::read_to_string(e.path()).ok()?;
             let evidence: Evidence = serde_json::from_str(&content).ok()?;
@@ -72,17 +71,7 @@ pub fn load(repo: &Path, id: &str) -> Result<Evidence, WitnessError> {
 }
 
 pub fn verify(_repo: &Path, evidence: &Evidence) -> Result<bool, WitnessError> {
-    // Recompute bundle hash and compare
-    let mut hasher = Sha256::new();
-    hasher.update(evidence.command.as_bytes());
-    hasher.update(evidence.timestamp.as_bytes());
-    hasher.update(evidence.exit_code.to_string().as_bytes());
-    hasher.update(evidence.stdout.as_bytes());
-    hasher.update(evidence.stderr.as_bytes());
-    let hash = hasher.finalize();
-    let computed = format!("{:x}", hash);
-
-    Ok(computed == evidence.bundle_hash)
+    Ok(compute_bundle_hash(evidence).is_some_and(|computed| computed == evidence.bundle_hash))
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

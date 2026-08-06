@@ -30,6 +30,23 @@ fn json_output(output: Output, label: &str) -> serde_json::Value {
     })
 }
 
+fn legacy_bundle_hash(
+    command: &str,
+    timestamp: &str,
+    exit_code: i32,
+    stdout: &str,
+    stderr: &str,
+) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(command.as_bytes());
+    hasher.update(timestamp.as_bytes());
+    hasher.update(exit_code.to_string().as_bytes());
+    hasher.update(stdout.as_bytes());
+    hasher.update(stderr.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 fn init_repo(dir: &Path) {
     Command::new("git")
         .arg("init")
@@ -109,7 +126,16 @@ fn run_with_tag() {
 
     let json = json_output(
         witness(dir)
-            .args(["--format", "json", "run", "--tag", "deploy", "--", "echo", "deploying"])
+            .args([
+                "--format",
+                "json",
+                "run",
+                "--tag",
+                "deploy",
+                "--",
+                "echo",
+                "deploying",
+            ])
             .output()
             .unwrap(),
         "witness run with tag",
@@ -156,8 +182,14 @@ fn list_shows_recorded_evidence() {
     init_repo(dir);
 
     // Record two commands
-    witness(dir).args(["run", "--", "echo", "first"]).output().unwrap();
-    witness(dir).args(["run", "--", "echo", "second"]).output().unwrap();
+    witness(dir)
+        .args(["run", "--", "echo", "first"])
+        .output()
+        .unwrap();
+    witness(dir)
+        .args(["run", "--", "echo", "second"])
+        .output()
+        .unwrap();
 
     let json = json_output(
         witness(dir)
@@ -197,7 +229,10 @@ fn show_returns_full_evidence() {
     );
 
     let ev = &show["evidence"];
+    assert_eq!(ev["schema_version"], 2);
     assert_eq!(ev["command"], "echo captured");
+    assert_eq!(ev["command_argv"], serde_json::json!(["echo", "captured"]));
+    assert_eq!(ev["bundle_hash_version"], "witness-v2");
     assert_eq!(ev["exit_code"], 0);
     assert!(ev["stdout"].as_str().unwrap().contains("captured"));
     assert!(!ev["bundle_hash"].as_str().unwrap().is_empty());
@@ -265,7 +300,9 @@ fn verify_tampered_bundle_fails() {
     let id = run_json["evidence_id"].as_str().unwrap();
 
     // Tamper with the stored evidence
-    let evidence_path = dir.join(".agent-witness/evidence").join(format!("{id}.json"));
+    let evidence_path = dir
+        .join(".agent-witness/evidence")
+        .join(format!("{id}.json"));
     let content = fs::read_to_string(&evidence_path).unwrap();
     let tampered = content.replace("tamper-test", "TAMPERED");
     fs::write(&evidence_path, tampered).unwrap();
@@ -276,6 +313,140 @@ fn verify_tampered_bundle_fails() {
             .output()
             .unwrap(),
         "witness verify tampered",
+    );
+
+    assert_eq!(verify["ok"], true);
+    assert_eq!(verify["verified"], false);
+}
+
+#[test]
+fn verify_tampered_context_fails() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let run_json = json_output(
+        witness(dir)
+            .args([
+                "--format", "json", "run", "--tag", "truth", "--", "echo", "context",
+            ])
+            .output()
+            .unwrap(),
+        "witness run",
+    );
+    let id = run_json["evidence_id"].as_str().unwrap();
+
+    let evidence_path = dir
+        .join(".agent-witness/evidence")
+        .join(format!("{id}.json"));
+    let content = fs::read_to_string(&evidence_path).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
+    value["git_context"]["dirty"] =
+        serde_json::json!(!value["git_context"]["dirty"].as_bool().unwrap());
+    fs::write(
+        &evidence_path,
+        serde_json::to_string_pretty(&value).unwrap(),
+    )
+    .unwrap();
+
+    let verify = json_output(
+        witness(dir)
+            .args(["--format", "json", "verify", id])
+            .output()
+            .unwrap(),
+        "witness verify context tamper",
+    );
+
+    assert_eq!(verify["ok"], true);
+    assert_eq!(verify["verified"], false);
+}
+
+#[test]
+fn verify_legacy_bundle_without_hash_version_still_passes() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let evidence_dir = dir.join(".agent-witness/evidence");
+    fs::create_dir_all(&evidence_dir).unwrap();
+
+    let id = "legacy123456";
+    let command = "echo legacy";
+    let timestamp = "2026-06-22T04:40:00Z";
+    let exit_code = 0;
+    let stdout = "legacy\n";
+    let stderr = "";
+    let hash = legacy_bundle_hash(command, timestamp, exit_code, stdout, stderr);
+    let legacy = serde_json::json!({
+        "id": id,
+        "timestamp": timestamp,
+        "command": command,
+        "tag": "legacy",
+        "cwd": dir.display().to_string(),
+        "exit_code": exit_code,
+        "duration_ms": 1,
+        "stdout": stdout,
+        "stderr": stderr,
+        "environment": {
+            "os": "linux",
+            "user": "tester",
+            "rust_version": null,
+            "node_version": null
+        },
+        "git_context": null,
+        "bundle_hash": hash
+    });
+    fs::write(
+        evidence_dir.join(format!("{id}.json")),
+        serde_json::to_string_pretty(&legacy).unwrap(),
+    )
+    .unwrap();
+
+    let verify = json_output(
+        witness(dir)
+            .args(["--format", "json", "verify", id])
+            .output()
+            .unwrap(),
+        "witness verify legacy",
+    );
+
+    assert_eq!(verify["ok"], true);
+    assert_eq!(verify["verified"], true);
+}
+
+#[test]
+fn verify_unknown_hash_version_fails_closed() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let run_json = json_output(
+        witness(dir)
+            .args(["--format", "json", "run", "--", "echo", "unknown-version"])
+            .output()
+            .unwrap(),
+        "witness run",
+    );
+    let id = run_json["evidence_id"].as_str().unwrap();
+
+    let evidence_path = dir
+        .join(".agent-witness/evidence")
+        .join(format!("{id}.json"));
+    let content = fs::read_to_string(&evidence_path).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
+    value["bundle_hash_version"] = serde_json::json!("witness-v999");
+    fs::write(
+        &evidence_path,
+        serde_json::to_string_pretty(&value).unwrap(),
+    )
+    .unwrap();
+
+    let verify = json_output(
+        witness(dir)
+            .args(["--format", "json", "verify", id])
+            .output()
+            .unwrap(),
+        "witness verify unknown version",
     );
 
     assert_eq!(verify["ok"], true);

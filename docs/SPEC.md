@@ -9,7 +9,7 @@ the bundle hash later.
 ## Goals
 
 - Make "tests passed" and similar claims auditable after compaction.
-- Store command output with environment and git context.
+- Store command output with exact argv, environment, and git context.
 - Keep evidence repo-local and gitignored.
 - Support simple listing, showing, and hash verification.
 
@@ -72,16 +72,19 @@ witness verify <id>
 witness verify <id> --format json
 ```
 
-Recomputes the SHA-256 bundle hash from the command, timestamp, exit code,
-stdout, and stderr.
+Recomputes the SHA-256 bundle hash from the bundle's declared hash contract.
+New bundles use `witness-v2`; legacy bundles without a hash version use the
+original MVP hash contract.
 
 ## Evidence Schema
 
 ```json
 {
+  "schema_version": 2,
   "id": "12-char-hash",
   "timestamp": "2026-06-22T04:40:00Z",
   "command": "cargo test",
+  "command_argv": ["cargo", "test"],
   "tag": "test",
   "cwd": "/path/to/repo",
   "exit_code": 0,
@@ -99,11 +102,52 @@ stdout, and stderr.
     "head_sha": "abc1234",
     "dirty": false
   },
+  "bundle_hash_version": "witness-v2",
   "bundle_hash": "sha256 hex"
 }
 ```
 
 `git_context` is `null` outside a git repository.
+
+## Integrity Contract
+
+New evidence is written with:
+
+- `schema_version: 2`
+- `bundle_hash_version: witness-v2`
+- `command_argv` preserving the exact argv vector passed after `--`
+
+The `witness-v2` hash protects:
+
+- schema version
+- evidence id
+- timestamp
+- command display string
+- exact argv
+- tag
+- cwd
+- wrapped command exit code
+- duration
+- stdout
+- stderr
+- captured environment
+- captured git context
+- bundle hash version
+
+Older evidence without `bundle_hash_version` is treated as `legacy-v1` and
+verified with the original MVP hash contract:
+
+- command display string
+- timestamp
+- wrapped command exit code
+- stdout
+- stderr
+
+Legacy compatibility keeps old local evidence readable, but agents should treat
+new `witness-v2` evidence as the stronger trust surface.
+
+Evidence with an unknown explicit `bundle_hash_version` fails verification
+closed. Witness should only verify hash contracts it knows how to recompute.
 
 ## Run JSON Output
 
