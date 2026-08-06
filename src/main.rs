@@ -104,6 +104,26 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
             }
             Ok(())
         }
+        Command::Doctor { limit, strict } => {
+            let repo = cli.resolve_repo()?;
+            let witness_dir = store::witness_dir(&repo);
+            let evidence_dir = store::evidence_dir(&repo);
+            let paths_usable = repo.exists()
+                && repo.is_dir()
+                && (!witness_dir.exists() || witness_dir.is_dir())
+                && (!evidence_dir.exists() || evidence_dir.is_dir());
+            let list = if paths_usable {
+                store::list(&repo, *limit)?
+            } else {
+                store::EvidenceList::default()
+            };
+            let doctor =
+                report::print_doctor(&repo, &witness_dir, &evidence_dir, &list, cli.is_json())?;
+            if *strict {
+                std::process::exit(doctor.action_level.strict_exit_code());
+            }
+            Ok(())
+        }
     }
 }
 

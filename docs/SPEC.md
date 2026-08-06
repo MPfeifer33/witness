@@ -87,6 +87,24 @@ JSON verification returns a stable reason string:
 - `hash_mismatch`
 - `unsupported_hash_version`
 
+### doctor
+
+```sh
+witness doctor
+witness doctor --format json
+witness doctor --strict
+```
+
+Checks evidence-store health without creating `.agent-witness`. Missing
+evidence storage is not an error; Witness can create it on the first
+`witness run`. Existing invalid bundles are surfaced as a review gate.
+
+`doctor --strict` prints the normal report and exits by `action_level`:
+
+- `none`: 0
+- `review`: 30
+- `stop`: 30
+
 ## Evidence Schema
 
 ```json
@@ -206,6 +224,46 @@ describe local evidence files that could not be read or parsed.
 }
 ```
 
+## Doctor JSON Output
+
+```json
+{
+  "ok": true,
+  "schema_version": "witness.doctor.v1",
+  "status": "ready",
+  "action_level": "none",
+  "gates": {
+    "repo_exists": true,
+    "repo_is_directory": true,
+    "witness_path_usable": true,
+    "evidence_path_usable": true,
+    "invalid_bundles_clear": true
+  },
+  "evidence_count": 1,
+  "listed_evidence_count": 1,
+  "invalid_count": 0,
+  "latest_evidence": {
+    "id": "abc123def456",
+    "timestamp": "2026-08-06T22:00:00Z",
+    "command": "cargo test",
+    "exit_code": 0,
+    "duration_ms": 87,
+    "tag": "test"
+  },
+  "recommended_commands": [
+    {
+      "kind": "command",
+      "command": "witness verify abc123def456",
+      "argv": ["witness", "verify", "abc123def456"],
+      "label": "witness verify abc123def456",
+      "reason": "verify the latest evidence bundle before citing it",
+      "reason_code": "verify_latest_evidence",
+      "required": false
+    }
+  ]
+}
+```
+
 ## Exit Codes
 
 | Code | Meaning |
@@ -214,6 +272,7 @@ describe local evidence files that could not be read or parsed.
 | `1` | Validation or JSON error |
 | `2` | IO error |
 | `3` | Evidence not found |
+| `30` | `doctor --strict` found a `review` or `stop` gate |
 
 The wrapped command exit code is data in the evidence bundle; it does not
 become the `witness run` process exit code in the MVP.

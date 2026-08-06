@@ -77,4 +77,13 @@ pub enum Command {
         /// Evidence ID
         id: String,
     },
+    /// Check evidence-store health for agents
+    Doctor {
+        /// Max evidence entries to include
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Exit non-zero according to action_level after printing the normal report
+        #[arg(long)]
+        strict: bool,
+    },
 }

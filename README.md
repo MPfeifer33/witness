@@ -25,6 +25,7 @@ cargo run -- run --tag test -- cargo test
 cargo run -- list
 cargo run -- show <id>
 cargo run -- verify <id>
+cargo run -- doctor
 ```
 
 After installation, replace `cargo run --` with `witness`.
@@ -72,6 +73,22 @@ witness verify <id> --format json
 JSON verification includes `verified` plus a stable `reason`: `valid`,
 `hash_mismatch`, or `unsupported_hash_version`.
 
+### doctor
+
+```sh
+witness doctor
+witness doctor --strict
+witness --format json doctor
+```
+
+Checks local evidence-store readiness without creating `.agent-witness`.
+JSON output uses `schema_version: witness.doctor.v1` and includes
+`status`, `action_level`, `gates`, `invalid_count`, `latest_evidence`, and
+structured `recommended_commands`.
+
+`doctor --strict` prints the same report, then exits 0 for `none` and 30 for
+`review` or `stop`.
+
 ## Storage
 
 ```text
@@ -111,6 +128,7 @@ witness run --tag test -- cargo test --test cli_claims
 witness run --tag full-test -- cargo test
 
 # Include evidence IDs in the final note or latch handoff.
+witness doctor
 witness list
 ```
 

@@ -6,7 +6,11 @@ use crate::WitnessError;
 const WITNESS_DIR: &str = ".agent-witness";
 const EVIDENCE_DIR: &str = "evidence";
 
-fn evidence_dir(repo: &Path) -> PathBuf {
+pub fn witness_dir(repo: &Path) -> PathBuf {
+    repo.join(WITNESS_DIR)
+}
+
+pub fn evidence_dir(repo: &Path) -> PathBuf {
     repo.join(WITNESS_DIR).join(EVIDENCE_DIR)
 }
 
@@ -85,8 +89,13 @@ pub fn list(repo: &Path, limit: usize) -> Result<EvidenceList, WitnessError> {
 
     // Sort by timestamp descending
     entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    let total_valid_count = entries.len();
     entries.truncate(limit);
-    Ok(EvidenceList { entries, invalid })
+    Ok(EvidenceList {
+        entries,
+        invalid,
+        total_valid_count,
+    })
 }
 
 pub fn load(repo: &Path, id: &str) -> Result<Evidence, WitnessError> {
@@ -123,7 +132,7 @@ pub fn verify(_repo: &Path, evidence: &Evidence) -> Result<VerificationResult, W
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceEntry {
     pub id: String,
     pub timestamp: String,
@@ -133,10 +142,12 @@ pub struct EvidenceEntry {
     pub tag: Option<String>,
 }
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceList {
     pub entries: Vec<EvidenceEntry>,
     pub invalid: Vec<InvalidEvidenceEntry>,
+    #[serde(default)]
+    pub total_valid_count: usize,
 }
 
 impl EvidenceList {
@@ -145,7 +156,7 @@ impl EvidenceList {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InvalidEvidenceEntry {
     pub path: String,
     pub reason: String,

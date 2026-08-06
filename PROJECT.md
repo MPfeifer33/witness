@@ -28,6 +28,7 @@ witness run --tag deploy -- ./deploy.sh    # tagged evidence
 witness list                               # browse recent evidence
 witness show <id>                          # full evidence detail
 witness verify <id>                        # check bundle integrity
+witness doctor                             # evidence-store readiness
 ```
 
 ## Evidence Bundle Contents
@@ -42,5 +43,9 @@ witness verify <id>                        # check bundle integrity
 - Bundle hash (SHA-256 over the declared hash contract)
 
 ## Last Updated
+
+2026-08-06 — Added `witness.doctor.v1` evidence-store preflight with
+status/action_level/gates, invalid-bundle review action, latest evidence
+summary, structured recommended commands, and strict gate exits.
 
 2026-08-06 — Added `witness-v2` evidence hashing for full-context integrity, corrupt-bundle list reporting, safe hash previews, and verify reason codes.

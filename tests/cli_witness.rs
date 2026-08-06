@@ -30,6 +30,26 @@ fn json_output(output: Output, label: &str) -> serde_json::Value {
     })
 }
 
+fn json_output_allow_status(
+    output: Output,
+    expected_status: i32,
+    label: &str,
+) -> serde_json::Value {
+    assert_eq!(
+        output.status.code(),
+        Some(expected_status),
+        "{label} exited unexpectedly\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|err| {
+        panic!(
+            "{label} returned invalid JSON: {err}\nstdout:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    })
+}
+
 fn legacy_bundle_hash(
     command: &str,
     timestamp: &str,
@@ -254,6 +274,110 @@ fn list_surfaces_invalid_evidence_files() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Invalid evidence bundle"));
     assert!(stdout.contains("bad.json"));
+}
+
+// --- doctor ---
+
+#[test]
+fn doctor_empty_store_is_ready_without_creating_evidence_dir() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+
+    let json = json_output(
+        witness(dir)
+            .args(["--format", "json", "doctor"])
+            .output()
+            .unwrap(),
+        "witness doctor empty",
+    );
+
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["schema_version"], "witness.doctor.v1");
+    assert_eq!(json["status"], "ready");
+    assert_eq!(json["action_level"], "none");
+    assert_eq!(json["evidence_count"], 0);
+    assert_eq!(json["store"]["evidence_dir_exists"], false);
+    assert_eq!(
+        json["recommended_commands"][0]["reason_code"],
+        "record_validation_evidence"
+    );
+    assert!(!dir.join(".agent-witness/evidence").exists());
+
+    let strict = json_output_allow_status(
+        witness(dir)
+            .args(["--format", "json", "doctor", "--strict"])
+            .output()
+            .unwrap(),
+        0,
+        "witness doctor empty strict",
+    );
+    assert_eq!(strict["ok"], true);
+    assert_eq!(strict["doctor"]["action_level"], "none");
+}
+
+#[test]
+fn doctor_reports_invalid_bundles_as_review_action() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+    let evidence_dir = dir.join(".agent-witness/evidence");
+    fs::create_dir_all(&evidence_dir).unwrap();
+    fs::write(evidence_dir.join("bad.json"), "{not json}").unwrap();
+
+    let json = json_output(
+        witness(dir)
+            .args(["--format", "json", "doctor"])
+            .output()
+            .unwrap(),
+        "witness doctor invalid",
+    );
+
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["status"], "blocked");
+    assert_eq!(json["action_level"], "review");
+    assert_eq!(json["invalid_count"], 1);
+    assert_eq!(json["gates"]["invalid_bundles_clear"], false);
+    assert_eq!(
+        json["recommended_commands"][0]["reason_code"],
+        "inspect_invalid_evidence"
+    );
+
+    let strict = json_output_allow_status(
+        witness(dir)
+            .args(["--format", "json", "doctor", "--strict"])
+            .output()
+            .unwrap(),
+        30,
+        "witness doctor invalid strict",
+    );
+    assert_eq!(strict["ok"], true);
+    assert_eq!(strict["doctor"]["action_level"], "review");
+}
+
+#[test]
+fn doctor_blocks_when_witness_path_is_not_directory() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo(dir);
+    fs::write(dir.join(".agent-witness"), "not a directory").unwrap();
+
+    let json = json_output(
+        witness(dir)
+            .args(["--format", "json", "doctor"])
+            .output()
+            .unwrap(),
+        "witness doctor blocked path",
+    );
+
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["status"], "blocked");
+    assert_eq!(json["action_level"], "stop");
+    assert_eq!(json["gates"]["witness_path_usable"], false);
+    assert_eq!(
+        json["recommended_commands"][0]["reason_code"],
+        "evidence_path_blocked"
+    );
 }
 
 // --- show ---
