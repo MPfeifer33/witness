@@ -3,6 +3,7 @@ name = "witness"
 version = "0.1.0"
 edition = "2021"
 description = "Reproducible command evidence recorder — proves work with auditable bundles"
+license = "Apache-2.0"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

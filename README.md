@@ -10,6 +10,19 @@ It answers:
 Can we prove what command was run and what it produced?
 ```
 
+## Suite Context
+
+Witness is part of a local-first agent tool suite centered on
+[Switchboard](https://github.com/MPfeifer33/switchboard):
+
+- [Probe](https://github.com/MPfeifer33/probe): project preflight and drift
+  scanner
+- [Latch](https://github.com/MPfeifer33/latch): repo-local coordination ledger
+- [Atlas](https://github.com/MPfeifer33/atlas): codebase graph and impact map
+- [Sentinel](https://github.com/MPfeifer33/sentinel): regression risk watcher
+- [Witness](https://github.com/MPfeifer33/witness): reproducible command
+  evidence recorder
+
 ## Quickstart
 
 ```sh
@@ -29,6 +42,13 @@ cargo run -- doctor
 ```
 
 After installation, replace `cargo run --` with `witness`.
+
+Install the CLI from a local checkout:
+
+```sh
+cargo install --path .
+witness --help
+```
 
 ## Commands
 
@@ -135,3 +155,9 @@ witness list
 ## Design
 
 The implementation contract is in [docs/SPEC.md](docs/SPEC.md).
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE). Redistributed or derivative works must preserve the NOTICE
+attribution required by the license.
