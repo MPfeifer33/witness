@@ -62,7 +62,12 @@ witness run --format json --tag smoke -- sh -c "printf hello"
 
 `witness run` records the wrapped command's exit code as evidence. If the
 wrapped command fails, `witness` still succeeds as long as it captured and
-stored the evidence.
+stored the evidence. Pass `--propagate-exit` to exit with the wrapped
+command's code instead (for git hooks and other gates):
+
+```sh
+witness run --propagate-exit -- cargo test
+```
 
 ### list
 

@@ -1,6 +1,7 @@
 use crate::capture::Evidence;
 use crate::store::{EvidenceEntry, EvidenceList};
 use crate::WitnessError;
+use agent_tools_core::ExitCode;
 use std::path::Path;
 
 const DOCTOR_SCHEMA_VERSION: &str = "witness.doctor.v1";
@@ -57,8 +58,8 @@ impl ActionLevel {
 
     pub fn strict_exit_code(self) -> i32 {
         match self {
-            ActionLevel::None => 0,
-            ActionLevel::Review | ActionLevel::Stop => 30,
+            ActionLevel::None => ExitCode::Success.code(),
+            ActionLevel::Review | ActionLevel::Stop => ExitCode::GateStop.code(),
         }
     }
 }

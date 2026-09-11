@@ -3,6 +3,7 @@ mod cli;
 mod report;
 mod store;
 
+use agent_tools_core::{exit_with, report_error, ExitCode, RepoError};
 use clap::Parser;
 use cli::{Cli, Command};
 
@@ -12,47 +13,31 @@ fn main() {
     match result {
         Ok(()) => {}
         Err(e) => {
-            let code = e.exit_code();
-            if cli.is_json() {
-                let err_json = serde_json::json!({
-                    "ok": false,
-                    "error": {
-                        "code": e.error_code(),
-                        "message": e.to_string(),
-                    }
-                });
-                eprintln!(
-                    "{}",
-                    serde_json::to_string_pretty(&err_json).unwrap_or_else(|_| format!(
-                        "{{\"ok\":false,\"error\":{{\"message\":\"{e}\"}}}}"
-                    ))
-                );
-            } else {
-                eprintln!("error: {e}");
-            }
-            std::process::exit(code);
+            report_error(cli.is_json(), e.error_code(), &e.to_string());
+            exit_with(e.exit_code());
         }
     }
 }
 
 fn run(cli: &Cli) -> Result<(), WitnessError> {
     match &cli.command {
-        Command::Run { command, tag } => {
+        Command::Run {
+            command,
+            tag,
+            propagate_exit,
+        } => {
             let repo = cli.resolve_repo()?;
             let evidence = capture::run_and_capture(&repo, command, tag.as_deref())?;
             let id = store::save(&repo, &evidence)?;
 
             if cli.is_json() {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "ok": true,
-                        "evidence_id": id,
-                        "exit_code": evidence.exit_code,
-                        "duration_ms": evidence.duration_ms,
-                        "passed": evidence.exit_code == 0,
-                    }))?
-                );
+                agent_tools_core::print_raw_json(&serde_json::json!({
+                    "ok": true,
+                    "evidence_id": id,
+                    "exit_code": evidence.exit_code,
+                    "duration_ms": evidence.duration_ms,
+                    "passed": evidence.exit_code == 0,
+                }))?;
             } else {
                 let icon = if evidence.exit_code == 0 {
                     "✓"
@@ -64,6 +49,9 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
                     evidence.exit_code
                 );
                 println!("  Duration: {}ms", evidence.duration_ms);
+            }
+            if *propagate_exit && evidence.exit_code != 0 {
+                exit_with(evidence.exit_code);
             }
             Ok(())
         }
@@ -120,7 +108,7 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
             let doctor =
                 report::print_doctor(&repo, &witness_dir, &evidence_dir, &list, cli.is_json())?;
             if *strict {
-                std::process::exit(doctor.action_level.strict_exit_code());
+                exit_with(doctor.action_level.strict_exit_code());
             }
             Ok(())
         }
@@ -139,13 +127,20 @@ pub enum WitnessError {
     Json(#[from] serde_json::Error),
 }
 
+impl From<RepoError> for WitnessError {
+    fn from(err: RepoError) -> Self {
+        WitnessError::Io(err.into())
+    }
+}
+
 impl WitnessError {
     pub fn exit_code(&self) -> i32 {
         match self {
-            WitnessError::Validation(_) => 1,
-            WitnessError::NotFound(_) => 3,
+            WitnessError::Validation(_) => ExitCode::Validation.code(),
+            WitnessError::NotFound(_) => ExitCode::NotFound.code(),
+            // Historical witness code (docs/SPEC.md); predates the shared table.
             WitnessError::Io(_) => 2,
-            WitnessError::Json(_) => 1,
+            WitnessError::Json(_) => ExitCode::Validation.code(),
         }
     }
 

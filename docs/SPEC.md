@@ -46,6 +46,15 @@ Runs the command after `--`, records evidence, and exits successfully as long
 as the command could be executed and the evidence could be stored. A failing
 wrapped command is recorded with `passed: false`.
 
+With `--propagate-exit`, `witness run` still records and prints the same
+summary, then exits with the wrapped command's exit code (non-zero only when
+the command failed). Use it where the failure must reach the caller, such as
+a git pre-commit hook:
+
+```sh
+witness run --propagate-exit --tag pre-commit -- cargo test
+```
+
 ### list
 
 ```sh
@@ -275,4 +284,9 @@ describe local evidence files that could not be read or parsed.
 | `30` | `doctor --strict` found a `review` or `stop` gate |
 
 The wrapped command exit code is data in the evidence bundle; it does not
-become the `witness run` process exit code in the MVP.
+become the `witness run` process exit code unless `--propagate-exit` is given,
+in which case a failing wrapped command's code is returned verbatim after the
+evidence is stored.
+
+Repo resolution (shared with the other agent tools via `agent-tools-core`):
+`--repo` > `AGENT_REPO` env > nearest `.git` ancestor of cwd > cwd.
