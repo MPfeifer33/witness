@@ -138,11 +138,12 @@ fn run_captures_failing_command() {
     let dir = tmp.path();
     init_repo(dir);
 
-    let json = json_output(
+    let json = json_output_allow_status(
         witness(dir)
             .args(["--format", "json", "run", "--", "false"])
             .output()
             .unwrap(),
+        1,
         "witness run false",
     );
 

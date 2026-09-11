@@ -44,10 +44,10 @@ pub enum Command {
         /// Tag for categorization
         #[arg(long)]
         tag: Option<String>,
-        /// After recording, exit with the wrapped command's exit code instead of 0
-        /// (for gates such as git hooks that need the failure to propagate)
+        /// Always exit 0 after recording, even when the wrapped command failed
+        /// (legacy behaviour; by default witness exits with the wrapped command's code)
         #[arg(long)]
-        propagate_exit: bool,
+        exit_zero: bool,
     },
     /// List recorded evidence
     List {

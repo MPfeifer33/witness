@@ -60,14 +60,15 @@ witness run --tag lint -- cargo clippy
 witness run --format json --tag smoke -- sh -c "printf hello"
 ```
 
-`witness run` records the wrapped command's exit code as evidence. If the
-wrapped command fails, `witness` still succeeds as long as it captured and
-stored the evidence. Pass `--propagate-exit` to exit with the wrapped
-command's code instead (for git hooks and other gates):
+`witness run` records the wrapped command's exit code as evidence and then
+exits with that same code, so it drops straight into a git hook or CI step:
 
 ```sh
-witness run --propagate-exit -- cargo test
+witness run --tag pre-commit -- cargo test   # fails when the tests fail
 ```
+
+Pass `--exit-zero` to always exit 0 once the evidence is stored (the legacy
+behaviour), when you only want the record.
 
 ### list
 

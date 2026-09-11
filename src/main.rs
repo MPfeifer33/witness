@@ -24,7 +24,7 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
         Command::Run {
             command,
             tag,
-            propagate_exit,
+            exit_zero,
         } => {
             let repo = cli.resolve_repo()?;
             let evidence = capture::run_and_capture(&repo, command, tag.as_deref())?;
@@ -50,7 +50,7 @@ fn run(cli: &Cli) -> Result<(), WitnessError> {
                 );
                 println!("  Duration: {}ms", evidence.duration_ms);
             }
-            if *propagate_exit && evidence.exit_code != 0 {
+            if !*exit_zero && evidence.exit_code != 0 {
                 exit_with(evidence.exit_code);
             }
             Ok(())

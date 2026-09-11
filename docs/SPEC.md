@@ -42,17 +42,18 @@ witness run --tag test -- cargo test
 witness run --format json --tag lint -- cargo clippy
 ```
 
-Runs the command after `--`, records evidence, and exits successfully as long
-as the command could be executed and the evidence could be stored. A failing
-wrapped command is recorded with `passed: false`.
+Runs the command after `--`, records evidence, prints the summary, then exits
+with the wrapped command's exit code (0 only when the command succeeded). A
+failing wrapped command is recorded with `passed: false` and its code is
+forwarded, so `witness run` can sit directly in a gate such as a git
+pre-commit hook. If witness itself cannot execute the command or store the
+evidence, it exits 2 (io error) as before.
 
-With `--propagate-exit`, `witness run` still records and prints the same
-summary, then exits with the wrapped command's exit code (non-zero only when
-the command failed). Use it where the failure must reach the caller, such as
-a git pre-commit hook:
+Pass `--exit-zero` to restore the pre-2026-09-11 behaviour (always exit 0 once
+the evidence is stored), for callers that only want the record:
 
 ```sh
-witness run --propagate-exit --tag pre-commit -- cargo test
+witness run --exit-zero --tag survey -- cargo test
 ```
 
 ### list

@@ -92,27 +92,30 @@ fn evidence_roundtrip_records_lists_shows_and_verifies() {
 }
 
 #[test]
-fn failed_command_is_recorded_without_failing_witness() {
+fn failed_command_is_recorded_and_its_exit_code_propagates() {
     let tmp = TempDir::new().unwrap();
     let dir = tmp.path();
 
-    let run = json_output(
-        witness(dir)
-            .args([
-                "--format",
-                "json",
-                "run",
-                "--tag",
-                "failure",
-                "--",
-                "sh",
-                "-c",
-                "echo nope >&2; exit 7",
-            ])
-            .output()
-            .unwrap(),
-        "witness run failed command",
+    let output = witness(dir)
+        .args([
+            "--format",
+            "json",
+            "run",
+            "--tag",
+            "failure",
+            "--",
+            "sh",
+            "-c",
+            "echo nope >&2; exit 7",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "witness run exits with the wrapped command's code"
     );
+    let run: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
 
     let id = run["evidence_id"].as_str().unwrap();
     assert_eq!(run["passed"], false);
