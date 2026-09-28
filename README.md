@@ -10,6 +10,28 @@ It answers:
 Can we prove what command was run and what it produced?
 ```
 
+## In ten seconds
+
+```bash
+cargo install --path .
+witness run --tag tests -- cargo --version
+witness list
+```
+
+```text
+✓ Command completed (exit 0), evidence saved: 70b8661139bd
+  Duration: 4ms
+
+witness: 1 evidence bundle(s)
+
+  ✓ 70b8661139bd `cargo --version` [tests] (4ms, exit 0)
+```
+
+Every bundle records argv, stdout, stderr, exit code, duration, environment,
+git context, and a hash. `witness verify <id>` proves the bundle is intact;
+`witness show <id>` prints what the command actually produced. Witness exits
+with the wrapped command's code, so it drops into scripts without changing them.
+
 ## Suite Context
 
 Witness is part of a local-first agent tool suite centered on

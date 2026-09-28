@@ -46,6 +46,8 @@ witness doctor                             # evidence-store readiness
 
 ## Last Updated
 
+2026-09-28: README gained an "In ten seconds" block with a real invocation and its output above the fold.
+
 2026-09-11 — Moved repo resolution, `--format`, exit codes, and the stderr
 error report onto `agent-tools-core`. Added `run --propagate-exit` (opt-in:
 the documented default of exiting 0 after a failed wrapped command is pinned
